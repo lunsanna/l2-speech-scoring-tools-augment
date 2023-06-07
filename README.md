@@ -1,10 +1,11 @@
-# l2-speech-scoring-tools
-Implementation of automatic speech rating systems for second language (L2) learners of Finnish and Finland Swedish
+# l2-speech-scoring-tools-augment
 
-The ASR systems were trained by run_asr_SLT_kfold.py
+This project extends the automatic speech rating systems by adding data augmentation pipelines. The system rates the proficiency levels of second language (L2) learners of Finnish and Finland Swedish automatically, given their spoken response to speaking tasks. 
 
-The hidden wav2vec 2.0 representations were extracted by extract_static_w2v2_features.py
+The project aims to explore and compare different augmentation techniques. 
 
-The speech rating wav2vec 2.0 systems were trained by run_classification_SLT_kfold.py
-
-speech_rating_FI.ipynb and speech_rating_SV.ipynb contain the results of speech rating experiments for L2 Finnish and Finland Swedish, respectively.
+The ASR systems were trained by running 
+- `run_asr_SLT_kfold.py` trains the ASR systems
+- `extract_static_w2v2_features.py` extraxts hidden wav2vec 2.0 representations
+- `run_classification_SLT_kfold.py` train speech rating wav2vec 2.0 systems
+- `speech_rating_FI.ipynb` and `speech_rating_SV.ipynb` contain results of speech rating experiments for L2 Finnish and Finland Swedish
