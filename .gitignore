@@ -1,4 +1,8 @@
 .vscode/
 .DS_Store
-test_*
+test*
 test/*
+*.log
+*.out
+*.err
+cache/*
