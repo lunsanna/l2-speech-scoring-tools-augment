@@ -37,6 +37,7 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class ModelArguments:
     """
@@ -44,11 +45,13 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
     freeze_feature_extractor: Optional[bool] = field(
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
@@ -60,6 +63,7 @@ class ModelArguments:
         default=True,
         metadata={"help": "Whether to log verbose messages or not."},
     )
+
 
 def configure_logger(model_args: ModelArguments, training_args: TrainingArguments):
     logging.basicConfig(
@@ -105,11 +109,13 @@ class DataTrainingArguments:
     )
     target_feature_extractor_sampling_rate: Optional[bool] = field(
         default=False,
-        metadata={"help": "Resample loaded audio to target feature extractor's sampling rate or not."},
+        metadata={
+            "help": "Resample loaded audio to target feature extractor's sampling rate or not."},
     )
     max_duration_in_seconds: Optional[float] = field(
         default=None,
-        metadata={"help": "Filters out examples longer than specified. Defaults to no filtering."},
+        metadata={
+            "help": "Filters out examples longer than specified. Defaults to no filtering."},
     )
     orthography: Optional[str] = field(
         default="librispeech",
@@ -162,10 +168,13 @@ class Orthography:
             )
         if name == "buckwalter":
             return cls(
-                vocab_file=pathlib.Path(__file__).parent.joinpath("vocab/buckwalter.json"),
+                vocab_file=pathlib.Path(__file__).parent.joinpath(
+                    "vocab/buckwalter.json"),
                 word_delimiter_token="/",  # "|" is Arabic letter alef with madda above
-                translation_table=str.maketrans({"-": " "}),  # sometimes used to represent pauses
-                words_to_remove={"sil"},  # until we have a "<sil>" special token
+                # sometimes used to represent pauses
+                translation_table=str.maketrans({"-": " "}),
+                # until we have a "<sil>" special token
+                words_to_remove={"sil"},
             )
         raise ValueError(f"Unsupported orthography: '{name}'.")
 
@@ -175,7 +184,9 @@ class Orthography:
         if len(self.words_to_remove) == 0:
             text = " ".join(text.split())  # clean up whilespaces
         else:
-            text = " ".join(w for w in text.split() if w not in self.words_to_remove)  # and clean up whilespaces
+            # and clean up whilespaces
+            text = " ".join(w for w in text.split()
+                            if w not in self.words_to_remove)
         return text
 
     def create_processor(self, model_args: ModelArguments) -> Wav2Vec2Processor:
@@ -197,6 +208,7 @@ class Orthography:
                 word_delimiter_token=self.word_delimiter_token,
             )
         return Wav2Vec2Processor(feature_extractor, tokenizer)
+
 
 @dataclass
 class DataCollatorCTCWithPadding:
@@ -234,8 +246,10 @@ class DataCollatorCTCWithPadding:
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lenghts and need
         # different padding methods
-        input_features = [{"input_values": feature["input_values"]} for feature in features]
-        label_features = [{"input_ids": feature["labels"]} for feature in features]
+        input_features = [{"input_values": feature["input_values"]}
+                          for feature in features]
+        label_features = [{"input_ids": feature["labels"]}
+                          for feature in features]
 
         batch = self.processor.pad(
             input_features,
@@ -254,7 +268,8 @@ class DataCollatorCTCWithPadding:
             )
 
         # replace padding with -100 to ignore loss correctly
-        labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
+        labels = labels_batch["input_ids"].masked_fill(
+            labels_batch.attention_mask.ne(1), -100)
 
         batch["labels"] = labels
 
@@ -269,16 +284,16 @@ class CTCTrainer(Trainer):
         Subclass and override to inject custom behavior.
 
         Args:
-            model (:obj:`nn.Module`):
+            model (`nn.Module`):
                 The model to train.
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
                 argument :obj:`labels`. Check your model's documentation for all accepted arguments.
 
         Return:
-            :obj:`torch.Tensor`: The tensor with training loss on this batch.
+            `torch.Tensor`: The tensor with training loss on this batch.
         """
 
         model.train()
@@ -296,7 +311,8 @@ class CTCTrainer(Trainer):
             elif model.module.config.ctc_loss_reduction == "sum":
                 loss = loss.sum() / (inputs["labels"] >= 0).sum()
             else:
-                raise ValueError(f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
+                raise ValueError(
+                    f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
 
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
@@ -312,54 +328,67 @@ class CTCTrainer(Trainer):
             loss.backward()
 
         return loss.detach()
-      
+
+
 def main():
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments))
 
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     configure_logger(model_args, training_args)
-
-    use_ft_vocab=True
-    lang="fi"
-    if lang=="fi":
-        path_to_csv="/scratch/work/getmany1/finnish_df.csv"
-        df = pd.read_csv(path_to_csv, encoding='utf-8',usecols=['recording_path','transcript_normalized','split'])
-        df.columns=['file','split','text']
-    elif lang=="sv":
-        path_to_csv="/scratch/work/getmany1/swedish_df.csv"
-        df = pd.read_csv(path_to_csv, encoding='utf-8',usecols=['recording_path','transcript_normalized','split'])
-        df.columns=['file','split','text']
+    print("data_args.preprocessing_num_workers",
+          data_args.preprocessing_num_workers)
+    use_ft_vocab = True
+    lang = "fi"
+    if lang == "fi":
+        path_to_csv = "../wav2vec2-finetune/finnish_df.csv"
+        df = pd.read_csv(path_to_csv, encoding='utf-8',
+                         usecols=['recording_path', 'transcript_normalized', 'split'])
+        df.columns = ['file', 'split', 'text']
+    elif lang == "sv":
+        path_to_csv = "../wav2vec2-finetune/swedish_df.csv"
+        df = pd.read_csv(path_to_csv, encoding='utf-8',
+                         usecols=['recording_path', 'transcript_normalized', 'split'])
+        df.columns = ['file', 'split', 'text']
 
     orthography = Orthography.from_name(data_args.orthography.lower())
     k = 4
-    for i in range(k):
+    for i in range(2, k):
         print(f"Fold {i}")
 
         if use_ft_vocab:
-            #Use fine-tuned model, don't remove LM head
-            if lang=="fi":
-                processor = Wav2Vec2Processor.from_pretrained("/scratch/work/getmany1/wav2vec/wav2vec2_large_14.2k_fi_0902022",cache_dir=model_args.cache_dir)
-            elif lang=="sv":
-                processor = Wav2Vec2Processor.from_pretrained(model_args.model_name_or_path,cache_dir=model_args.cache_dir)
-            model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir, pad_token_id=processor.tokenizer.pad_token_id, vocab_size=len(processor.tokenizer))
+            # Use fine-tuned model, don't remove LM head
+            if lang == "fi":
+                pretrained_fi = "/scratch/elec/puhe/p/getmany1/wav2vec2_large_14.2k_fi_donatespeech_100h_SEGMENTED_13042022_60ep/checkpoint-11100"
+                processor = Wav2Vec2Processor.from_pretrained(
+                    pretrained_fi, cache_dir=model_args.cache_dir)
+            elif lang == "sv":
+                processor = Wav2Vec2Processor.from_pretrained(
+                    model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+            model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir,
+                                                   pad_token_id=processor.tokenizer.pad_token_id, vocab_size=len(processor.tokenizer))
 
-        train_dataset = datasets.Dataset.from_pandas(df[df.split!=i])
-        val_dataset = datasets.Dataset.from_pandas(df[df.split==i])
-        
+        train_dataset = datasets.Dataset.from_pandas(df[df.split != i])
+        val_dataset = datasets.Dataset.from_pandas(df[df.split == i])
+
         wer_metric = datasets.load_metric("wer")
         cer_metric = datasets.load_metric("cer")
 
         target_sr = processor.feature_extractor.sampling_rate if data_args.target_feature_extractor_sampling_rate else None
-        vocabulary_chars_str = "".join(t for t in processor.tokenizer.get_vocab().keys() if len(t) == 1)
+        vocabulary_chars_str = "".join(
+            t for t in processor.tokenizer.get_vocab().keys() if len(t) == 1)
         vocabulary_text_cleaner = re.compile(  # remove characters not in vocabulary
-            f"[^\s{re.escape(vocabulary_chars_str)}]",  # allow space in addition to chars in vocabulary
+            # allow space in addition to chars in vocabulary
+            f"[^\s{re.escape(vocabulary_chars_str)}]",
             flags=re.IGNORECASE if processor.tokenizer.do_lower_case else 0,
         )
         text_updates = []
 
         def prepare_example(example):
-            example["speech"], example["sampling_rate"] = librosa.load(example["file"], sr=16000)
+            example["speech"], example["sampling_rate"] = librosa.load(
+                example["file"], sr=16000)
+
             example["duration_in_seconds"] = len(example["speech"]) / target_sr
             updated_text = orthography.preprocess_for_training(example["text"])
             updated_text = vocabulary_text_cleaner.sub("", updated_text)
@@ -368,8 +397,10 @@ def main():
                 example["text"] = updated_text
             return example
 
-        train_dataset = train_dataset.map(prepare_example, remove_columns=["file","split"])
-        val_dataset = val_dataset.map(prepare_example, remove_columns=["file","split"])
+        train_dataset = train_dataset.map(
+            prepare_example, remove_columns=["file", "split"])
+        val_dataset = val_dataset.map(
+            prepare_example, remove_columns=["file", "split"])
 
         if data_args.max_duration_in_seconds is not None:
 
@@ -388,12 +419,15 @@ def main():
                 logger.warning(
                     f"Filtered out {len(val_dataset) - old_val_size} validation example(s) longer than {data_args.max_duration_in_seconds} second(s)."
                 )
-        logger.info(f"Split sizes: {len(train_dataset)} train and {len(val_dataset)} validation.")
+        logger.info(
+            f"Split sizes: {len(train_dataset)} train and {len(val_dataset)} validation.")
 
-        logger.warning(f"Updated {len(text_updates)} transcript(s) using '{data_args.orthography}' orthography rules.")
+        logger.warning(
+            f"Updated {len(text_updates)} transcript(s) using '{data_args.orthography}' orthography rules.")
         if logger.isEnabledFor(logging.DEBUG):
             for original_text, updated_text in text_updates:
-                logger.debug(f'Updated text: "{original_text}" -> "{updated_text}"')
+                logger.debug(
+                    f'Updated text: "{original_text}" -> "{updated_text}"')
         text_updates = None
 
         def prepare_dataset(batch):
@@ -402,16 +436,18 @@ def main():
                 len(set(batch["sampling_rate"])) == 1
             ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
 
-            batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
+            batch["input_values"] = processor(
+                batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
+
             with processor.as_target_processor():
                 batch["labels"] = processor(batch["text"]).input_ids
             return batch
 
         train_dataset = train_dataset.map(
             prepare_dataset,
-            batch_size=training_args.per_device_train_batch_size,
             batched=True,
-            num_proc=data_args.preprocessing_num_workers,
+            batch_size=training_args.per_device_train_batch_size,
+            num_proc=6,
         )
         val_dataset = val_dataset.map(
             prepare_dataset,
@@ -420,24 +456,29 @@ def main():
             num_proc=data_args.preprocessing_num_workers,
         )
 
-        data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+        data_collator = DataCollatorCTCWithPadding(
+            processor=processor, padding=True)
 
         def compute_metrics(pred):
             pred_logits = pred.predictions
             pred_ids = np.argmax(pred_logits, axis=-1)
 
-            pred.label_ids[pred.label_ids == -100] = processor.tokenizer.pad_token_id
+            pred.label_ids[pred.label_ids == -
+                           100] = processor.tokenizer.pad_token_id
 
             pred_str = processor.batch_decode(pred_ids)
             # we do not want to group tokens when computing the metrics
-            label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
+            label_str = processor.batch_decode(
+                pred.label_ids, group_tokens=False)
             if logger.isEnabledFor(logging.DEBUG):
                 for prediction, reference in zip(pred_str, label_str):
                     logger.debug(f'reference: "{reference}"')
                     logger.debug(f'prediction: "{prediction}"')
 
-            wer = wer_metric.compute(predictions=pred_str, references=label_str)
-            cer = cer_metric.compute(predictions=pred_str, references=label_str)
+            wer = wer_metric.compute(
+                predictions=pred_str, references=label_str)
+            cer = cer_metric.compute(
+                predictions=pred_str, references=label_str)
 
             return {"wer": wer, "cer": cer}
 
@@ -446,11 +487,12 @@ def main():
         if model_args.freeze_base_model:
             model.freeze_base_model()
 
-        if i==0:
-            training_args.output_dir=training_args.output_dir+"_fold_"+str(i)
+        if i == 0:
+            training_args.output_dir = training_args.output_dir+"_fold_"+str(i)
         else:
-            training_args.output_dir=training_args.output_dir.replace(f"_fold_{str(i-1)}",f"_fold_{str(i)}")
-
+            training_args.output_dir = training_args.output_dir.replace(
+                f"_fold_{str(i-1)}", f"_fold_{str(i)}")
+        print(f"Output folder: {training_args.output_dir}")
         trainer = CTCTrainer(
             model=model,
             data_collator=data_collator,
@@ -465,6 +507,7 @@ def main():
         if training_args.load_best_model_at_end:
             predictions = trainer.predict(val_dataset)
             print(compute_metrics(predictions))
+
 
 if __name__ == "__main__":
     main()
